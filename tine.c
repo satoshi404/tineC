@@ -7,6 +7,10 @@ typedef unsigned char u8;  // 8 bits
 #define DEFAULT_CANVAS_COORDS_X(sw) sw / 2
 #define DEFAULT_CANVAS_COORDS_Y(sh) sh / 2
 
+// Rect mode
+#define TINEC_RECT_MODE0 0
+#define TINEC_RECT_MODE1 1
+
 // Format color -> 0xRGBA
 #define TINEC_COLOR_RED     0xff0000ff
 #define TINEC_COLOR_GREEN   0x00ff00ff
@@ -26,9 +30,11 @@ void   TINEC_CanvasFill(Canvas* canvas, u32 color);
 void   TINEC_CanvasDeinit(Canvas* canvas);
 
 // Draw functions
-void   TINEC_CanvasDrawRect(Canvas* canvas, u32 rect_x, u32 rect_y, u32 rect_w, u32 rect_h, u32 color);
+void   TINEC_CanvasDrawRect(Canvas* canvas, u32 rect_x, u32 rect_y, u32 rect_w, u32 rect_h, u32 color,u32 mode);
 void   TINEC_CanvasDrawPoint(Canvas* canvas, u32 point_x, u32 point_y, u32 color);
 void   TINEC_CanvasDrawCircle(Canvas* canvas, u32 lenght, u32 radius, u32 color);
+void   TINEC_CanvasDrawLine(Canvas* canvas, u32 x0, u32 y0, u32 x1, u32 y1, u32 color);
+
 
 #endif // ---- TINEC_HEADER ----
 
@@ -61,7 +67,7 @@ static SDL_Renderer* _renderer = NULL;
 static SDL_Texture* _texture = NULL; 
 
 static void TINEC_InitSDL(const u8* title, u32 width, u32 height) {
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {  // Corrigido: SDL_Init retorna < 0 em erro
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {  
         printf("Erro ao inicializar SDL: %s\n", SDL_GetError());
         exit(1);
     }
@@ -72,7 +78,7 @@ static void TINEC_InitSDL(const u8* title, u32 width, u32 height) {
         SDL_WINDOWPOS_CENTERED, 
         width, 
         height, 
-        0  // Garante que a janela seja visível
+        0  
     );
     
     if (!_window) {
@@ -134,8 +140,64 @@ void TINEC_CanvasFill(Canvas* canvas, u32 color) {
     }
 }
 
-void   TINEC_CanvasDrawRect(Canvas* canvas, u32 rect_x, u32 rect_y, u32 rect_w, u32 rect_h, u32 color) {
+void TINEC_CanvasDrawLine(Canvas* canvas, u32 x0, u32 y0, u32 x1, u32 y1, u32 color) {  
+    int dx = abs((int)x1 - (int)x0);
+    int dy = -abs((int)y1 - (int)y0);
+    int sx = (x0 < x1) ? 1 : -1;
+    int sy = (y0 < y1) ? 1 : -1;
+    int err = dx + dy;
+    int x = x0;
+    int y = y0;
 
+    while (1) {
+        if (x >= 0 && x < canvas->width && y >= 0 && y < canvas->height) {
+            canvas->pixels[y * canvas->width + x] = color;
+        }
+        if (x == x1 && y == y1) break;
+        int e2 = 2 * err;
+        if (e2 >= dy) {
+            err += dy;
+            x += sx;
+        }
+        if (e2 <= dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+void TINEC_CanvasDrawRect(Canvas* canvas, u32 x, u32 y, u32 w, u32 h, u32 color,u32 mode) {
+
+    if (mode == TINEC_RECT_MODE0) {
+        u32 x0 = x;                    
+        u32 y0 = y;                   
+        u32 x1 = x + w;                
+        u32 y1 = y + h;               
+    
+        if (x0 >= canvas->width) return;
+        if (y0 >= canvas->height) return;
+        if (x1 > canvas->width) x1 = canvas->width;
+        if (y1 > canvas->height) y1 = canvas->height;
+    
+        for (u32 py = y0; py < y1; py++) {
+            for (u32 px = x0; px < x1; px++) {
+                canvas->pixels[py * canvas->width + px] = color;
+            }
+        }
+    } else if (mode == TINEC_RECT_MODE1) {
+        u32 x0 = x;         // Superior esquerdo
+    u32 y0 = y;
+    u32 x1 = x + w;     // Superior direito
+    u32 y1 = y;
+    u32 x2 = x + w;     // Inferior direito
+    u32 y2 = y + h;
+    u32 x3 = x;         // Inferior esquerdo
+    u32 y3 = y + h;
+        TINEC_CanvasDrawLine(canvas, x0, y0, x1, y1, color); 
+        TINEC_CanvasDrawLine(canvas, x1, y1, x2, y2, color); 
+        TINEC_CanvasDrawLine(canvas, x2, y2, x3, y3, color); 
+        TINEC_CanvasDrawLine(canvas, x3, y3, x0, y0, color); 
+    }
 }
 
 void TINEC_CanvasDeinit(Canvas* canvas) {

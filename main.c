@@ -13,14 +13,18 @@ int main(int argc, char* argv[]) {
         printf("Falha ao inicializar o canvas\n");
         return 1;
     }
-    
-    TINEC_CanvasFill(&canvas, TINEC_COLOR_RED);
 
+    printf("abs: %i", abs(100 - 300));
+    
     // Loop principal
     int running = 1;
+    int y = 100;
     TINEC_MainLoop(&running) {
         TINEC_EventQuit(&running);
+        TINEC_CanvasDrawRect(&canvas, 100, y , 90, 80, TINEC_COLOR_RED, TINEC_RECT_MODE0);
         TINEC_CanvasUpdate(&canvas);
+        TINEC_CanvasFill(&canvas, TINEC_COLOR_BLACK);
+        y++;
 
     }
 

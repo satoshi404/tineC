@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <sys/unistd.h>
 #include <SDL2/SDL.h>
+#include <unistd.h>
 #define TINEC_IMPLEMENTATION
 #include "tine.c"
 
@@ -14,18 +15,16 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    printf("abs: %i", abs(100 - 300));
-    
     // Loop principal
     int running = 1;
-    int y = 100;
+    int y = 250;
     TINEC_MainLoop(&running) {
         TINEC_EventQuit(&running);
-        TINEC_CanvasDrawRect(&canvas, 100, y , 90, 80, TINEC_COLOR_RED, TINEC_RECT_MODE0);
+        TINEC_CanvasDrawRect(&canvas, 350 - 200, y , 100, 100, TINEC_COLOR_RED, TINEC_RECT_MODE1);
+        TINEC_CanvasDrawCircle(&canvas, 350, 250, 50, TINEC_COLOR_GREEN);
         TINEC_CanvasUpdate(&canvas);
         TINEC_CanvasFill(&canvas, TINEC_COLOR_BLACK);
-        y++;
-
+        usleep(16777);
     }
 
     // Limpeza

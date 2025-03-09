@@ -3,13 +3,14 @@
 
 typedef unsigned int  u32; // 32 bits
 typedef unsigned char u8;  // 8 bits
+typedef float f32;       
 
-#define DEFAULT_CANVAS_COORDS_X(sw) sw / 2
-#define DEFAULT_CANVAS_COORDS_Y(sh) sh / 2
+#define DEFAULT_CANVAS_COORDS_X(sw) ((f32)sw / 2.0f)
+#define DEFAULT_CANVAS_COORDS_Y(sh) ((f32)sh / 2.0f)
 
 // Rect mode
-#define TINEC_RECT_MODE0 0
-#define TINEC_RECT_MODE1 1
+#define TINEC_MODE0 0
+#define TINEC_MODE1 << 1
 
 // Format color -> 0xRGBA
 #define TINEC_COLOR_RED     0xff0000ff
@@ -24,17 +25,16 @@ typedef struct {
     u32 height;
 } Canvas;
 
-Canvas TINEC_CanvasInit(const u8* title, u32 width, u32 height );
+Canvas TINEC_CanvasInit(const u8* title, u32 width, u32 height);
 void   TINEC_CanvasUpdate(Canvas* canvas);
 void   TINEC_CanvasFill(Canvas* canvas, u32 color);
 void   TINEC_CanvasDeinit(Canvas* canvas);
 
-// Draw functions
-void   TINEC_CanvasDrawRect(Canvas* canvas, u32 rect_x, u32 rect_y, u32 rect_w, u32 rect_h, u32 color,u32 mode);
-void   TINEC_CanvasDrawPoint(Canvas* canvas, u32 point_x, u32 point_y, u32 color);
-void   TINEC_CanvasDrawCircle(Canvas* canvas, u32 lenght, u32 radius, u32 color);
-void   TINEC_CanvasDrawLine(Canvas* canvas, u32 x0, u32 y0, u32 x1, u32 y1, u32 color);
-
+// Draw functions (modificadas para f32)
+void   TINEC_CanvasDrawRect(Canvas* canvas, f32 x, f32 y, u32 w, u32 h, u32 color, u32 mode);
+void   TINEC_CanvasDrawPixel(Canvas* canvas, f32 x, f32 y, u32 color);
+void   TINEC_CanvasDrawCircle(Canvas* canvas, f32 x, f32 y, f32 r, u32 color);
+void   TINEC_CanvasDrawLine(Canvas* canvas, f32 x0, f32 y0, f32 x1, f32 y1, u32 color);
 
 #endif // ---- TINEC_HEADER ----
 
@@ -42,6 +42,7 @@ void   TINEC_CanvasDrawLine(Canvas* canvas, u32 x0, u32 y0, u32 x1, u32 y1, u32 
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 #define PIXELS_SIZE(sw, sh) (sw * sh) * sizeof(u32)
 #define CANVAS_FOREACH(sw, sh, index) for (*(index); *(index) < (sw * sh); (*(index))++)
@@ -108,13 +109,13 @@ static void TINEC_InitSDL(const u8* title, u32 width, u32 height) {
     }
 }
 
-Canvas TINEC_CanvasInit(const u8* title, u32 width, u32 height ) {
+Canvas TINEC_CanvasInit(const u8* title, u32 width, u32 height) {
     Canvas canvas = {0};
     canvas.pixels = (u32*) malloc(PIXELS_SIZE(width, height)); 
 
     if (!canvas.pixels) {
         const u8* errn_message = "Failed to allocate canvas memory";
-        printf(errn_message);
+        printf("%s\n", errn_message);
         exit(13);
     }
     
@@ -140,20 +141,35 @@ void TINEC_CanvasFill(Canvas* canvas, u32 color) {
     }
 }
 
-void TINEC_CanvasDrawLine(Canvas* canvas, u32 x0, u32 y0, u32 x1, u32 y1, u32 color) {  
-    int dx = abs((int)x1 - (int)x0);
-    int dy = -abs((int)y1 - (int)y0);
-    int sx = (x0 < x1) ? 1 : -1;
-    int sy = (y0 < y1) ? 1 : -1;
+void TINEC_CanvasDrawPixel(Canvas* canvas, f32 x, f32 y, u32 color) {
+    // Converter coordenadas f32 para u32 (arredondando para baixo)
+    u32 px = (u32)floorf(x);
+    u32 py = (u32)floorf(y);
+    if (px >= 0 && px < canvas->width && py >= 0 && py < canvas->height) {
+        canvas->pixels[py * canvas->width + px] = color;
+    }
+}
+
+void TINEC_CanvasDrawLine(Canvas* canvas, f32 x0, f32 y0, f32 x1, f32 y1, u32 color) {  
+    // Converter coordenadas f32 para inteiros para o algoritmo de Bresenham
+    int ix0 = (int)floorf(x0);
+    int iy0 = (int)floorf(y0);
+    int ix1 = (int)floorf(x1);
+    int iy1 = (int)floorf(y1);
+
+    int dx = abs(ix1 - ix0);
+    int dy = -abs(iy1 - iy0);
+    int sx = (ix0 < ix1) ? 1 : -1;
+    int sy = (iy0 < iy1) ? 1 : -1;
     int err = dx + dy;
-    int x = x0;
-    int y = y0;
+    int x = ix0;
+    int y = iy0;
 
     while (1) {
-        if (x >= 0 && x < canvas->width && y >= 0 && y < canvas->height) {
+        if (x >= 0 && x < (int)canvas->width && y >= 0 && y < (int)canvas->height) {
             canvas->pixels[y * canvas->width + x] = color;
         }
-        if (x == x1 && y == y1) break;
+        if (x == ix1 && y == iy1) break;
         int e2 = 2 * err;
         if (e2 >= dy) {
             err += dy;
@@ -166,38 +182,72 @@ void TINEC_CanvasDrawLine(Canvas* canvas, u32 x0, u32 y0, u32 x1, u32 y1, u32 co
     }
 }
 
-void TINEC_CanvasDrawRect(Canvas* canvas, u32 x, u32 y, u32 w, u32 h, u32 color,u32 mode) {
-
-    if (mode == TINEC_RECT_MODE0) {
-        u32 x0 = x;                    
-        u32 y0 = y;                   
-        u32 x1 = x + w;                
-        u32 y1 = y + h;               
+void TINEC_CanvasDrawRect(Canvas* canvas, f32 x, f32 y, u32 w, u32 h, u32 color, u32 mode) {
+    if (mode == TINEC_MODE0) {
+        // Modo preenchido
+        f32 x0 = x;                    
+        f32 y0 = y;                   
+        f32 x1 = x + w;                
+        f32 y1 = y + h;               
     
-        if (x0 >= canvas->width) return;
-        if (y0 >= canvas->height) return;
-        if (x1 > canvas->width) x1 = canvas->width;
-        if (y1 > canvas->height) y1 = canvas->height;
+        // Converter para inteiros
+        u32 ix0 = (u32)floorf(x0);
+        u32 iy0 = (u32)floorf(y0);
+        u32 ix1 = (u32)floorf(x1);
+        u32 iy1 = (u32)floorf(y1);
     
-        for (u32 py = y0; py < y1; py++) {
-            for (u32 px = x0; px < x1; px++) {
+        if (ix0 >= canvas->width) return;
+        if (iy0 >= canvas->height) return;
+        if (ix1 > canvas->width) ix1 = canvas->width;
+        if (iy1 > canvas->height) iy1 = canvas->height;
+    
+        for (u32 py = iy0; py < iy1; py++) {
+            for (u32 px = ix0; px < ix1; px++) {
                 canvas->pixels[py * canvas->width + px] = color;
             }
         }
-    } else if (mode == TINEC_RECT_MODE1) {
-        u32 x0 = x;         // Superior esquerdo
-    u32 y0 = y;
-    u32 x1 = x + w;     // Superior direito
-    u32 y1 = y;
-    u32 x2 = x + w;     // Inferior direito
-    u32 y2 = y + h;
-    u32 x3 = x;         // Inferior esquerdo
-    u32 y3 = y + h;
-        TINEC_CanvasDrawLine(canvas, x0, y0, x1, y1, color); 
-        TINEC_CanvasDrawLine(canvas, x1, y1, x2, y2, color); 
-        TINEC_CanvasDrawLine(canvas, x2, y2, x3, y3, color); 
-        TINEC_CanvasDrawLine(canvas, x3, y3, x0, y0, color); 
+    } else if (mode == TINEC_MODE1) {
+        // Modo contorno
+        TINEC_CanvasDrawLine(canvas, x, y, x + w, y, color); 
+        TINEC_CanvasDrawLine(canvas, x + w, y, x + w, y + h, color); 
+        TINEC_CanvasDrawLine(canvas, x + w, y + h, x, y + h, color); 
+        TINEC_CanvasDrawLine(canvas, x, y + h, x, y, color); 
     }
+}
+
+void TINEC_CanvasDrawCircle(Canvas* canvas, f32 x, f32 y, f32 r, u32 color, u32 mode) {
+    if (mode == TINEC_MODE1) {
+    int cx = (int)floorf(x);
+    int cy = (int)floorf(y);
+    int radius = (int)floorf(r);
+
+    int px = 0;
+    int py = radius;
+    int d = 3 - 2 * radius;
+
+    // Função auxiliar para desenhar os 8 pontos simétricos do círculo
+    while (px <= py) {
+        // Desenhar os 8 pontos simétricos
+        TINEC_CanvasDrawPixel(canvas, (f32)(cx + px), (f32)(cy + py), color);
+        TINEC_CanvasDrawPixel(canvas, (f32)(cx - px), (f32)(cy + py), color);
+        TINEC_CanvasDrawPixel(canvas, (f32)(cx + px), (f32)(cy - py), color);
+        TINEC_CanvasDrawPixel(canvas, (f32)(cx - px), (f32)(cy - py), color);
+        TINEC_CanvasDrawPixel(canvas, (f32)(cx + py), (f32)(cy + px), color);
+        TINEC_CanvasDrawPixel(canvas, (f32)(cx - py), (f32)(cy + px), color);
+        TINEC_CanvasDrawPixel(canvas, (f32)(cx + py), (f32)(cy - px), color);
+        TINEC_CanvasDrawPixel(canvas, (f32)(cx - py), (f32)(cy - px), color);
+
+        if (d < 0) {
+            d = d + 4 * px + 6;
+        } else {
+            d = d + 4 * (px - py) + 10;
+            py--;
+        }
+        px++;
+    }
+  } else if (mode == TINEC_MODE0) {
+
+  }
 }
 
 void TINEC_CanvasDeinit(Canvas* canvas) {
